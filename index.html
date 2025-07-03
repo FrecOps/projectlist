@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Numbered Project Map + Full Legend with Colors</title>
+
+  <!-- Leaflet core -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+
+    /* Number badge style */
+    .number-marker {
+      color: #fff;
+      font-weight: bold;
+      text-align: center;
+      border-radius: 50%;
+      width: 26px;
+      height: 26px;
+      line-height: 26px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      font-size: 0.85rem;
+    }
+
+    /* Legend container */
+    .legend {
+      background: rgba(255,255,255,0.95);
+      padding: 10px;
+      line-height: 1.4;
+      font-size: 0.85rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      max-width: 240px;
+    }
+    .legend h4 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+    .legend ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .legend li {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .legend .swatch {
+      width: 14px;
+      height: 14px;
+      margin-right: 6px;
+      border: 1px solid #999;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.2);
+    }
+    .legend b {
+      display: inline-block;
+      width: 18px;
+      text-align: center;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <script>
+    // 1. Project data
+    const projects = [
+      { name: "Staunton Solar Project",      lat: 38.157,      lng: -79.049,      size: 26.0,  capex:  47000000 },
+      { name: "Mowdy Solar Project",         lat: 34.4957,     lng: -96.301,      size:  0.37, capex:    550000 },
+      { name: "Edgecore Solar Project",      lat: 33.124281,   lng: -111.462084,  size: 20,    capex:  41000000 },
+      { name: "Rising Star Solar Project",   lat: 31.440454,   lng: -100.717888,  size: 140,   capex: 140000000 },
+      { name: "Mary Kay (HQ) Solar Project", lat: 32.971425,   lng: -96.822403,   size:  1.5,  capex:   4000000 },
+      { name: "Mary Kay (RD) Solar Project", lat: 32.997469,   lng: -96.992903,   size:  3.9,  capex:   5800000 },
+      { name: "Baylor University Solar Project", lat: 31.545373,   lng: -97.116951,   size:  2.3,  capex:   7200000 },
+      { name: "Lockeford Solar Project",     lat: 38.153201,   lng: -121.162002,  size:  1.25, capex:   6400000 },
+      { name: "City of Rochester (RFP)",     lat: 43.153795,   lng: -77.611073,   size:  1.08, capex:   2500000 },
+      { name: "Chesterfield (RFP)",          lat: 37.491372,   lng: -77.546076,   size:  1.6,  capex:   3300000 },
+      { name: "EBP–Gorges Project (RFP)",    lat: 35.298807,   lng: -85.205338,   size:  3,    capex:   7500000 }
+    ];
+
+    // 2. Color palette (one color per project)
+    const palette = [
+      "#1f78b4","#33a02c","#e31a1c","#ff7f00","#6a3d9a",
+      "#b15928","#a6cee3","#b2df8a","#fb9a99","#fdbf6f","#cab2d6"
+    ];
+
+    // 3. Initialize map
+    const map = L.map('map').setView([37.8, -96], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 22,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // 4. Add numbered, colored markers
+    const allLatLngs = [];
+    projects.forEach((p, i) => {
+      const color = palette[i % palette.length];
+      const ll = [p.lat, p.lng];
+      allLatLngs.push(ll);
+
+      const numberIcon = L.divIcon({
+        className: 'number-marker',
+        html: `<div style="background:${color}; width:100%; height:100%; border-radius:50%;">${i+1}</div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
+      });
+
+      L.marker(ll, { icon: numberIcon })
+        .bindPopup(`
+          <strong>${p.name}</strong><br/>
+          Capacity: ${p.size} MW<br/>
+          CapEx: $${(p.capex/1e6).toFixed(1)} M
+        `)
+        .addTo(map);
+    });
+
+    // 5. Auto-fit map to show all markers
+    if (allLatLngs.length) {
+      map.fitBounds(allLatLngs, { padding: [40, 40] });
+    }
+
+    // 6. Create and add the full, non-scrolling legend
+    const legend = L.control({ position: 'topright' });
+    legend.onAdd = () => {
+      const div = L.DomUtil.create('div', 'legend');
+      let html = '<h4>Projects</h4><ul>';
+      projects.forEach((p, i) => {
+        const color = palette[i % palette.length];
+        html += `
+          <li>
+            <span class="swatch" style="background:${color}"></span>
+            <b>${i+1}</b>
+            ${p.name} — ${p.size} MW, $${(p.capex/1e6).toFixed(1)} M
+          </li>`;
+      });
+      html += '</ul>';
+      div.innerHTML = html;
+      return div;
+    };
+    legend.addTo(map);
+  </script>
+</body>
+</html>
