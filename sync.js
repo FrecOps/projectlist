@@ -6,8 +6,8 @@ import fetch from 'node‑fetch';
 export async function handler(event) {
   const { projects } = JSON.parse(event.body);
   const content = Buffer.from(JSON.stringify(projects, null, 2)).toString('base64');
-  const owner  = 'YOUR_USER';
-  const repo   = 'YOUR_REPO';
+  const owner  = 'FrecOps';
+  const repo   = 'projectlist';
   const path   = 'projects.json';
   const branch = 'main';
 
