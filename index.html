@@ -2,142 +2,153 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Project Map with Sidebar Summary Fixed</title>
-
+  <title>Project Map with Sidebar & GitHub Sync</title>
   <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <style>
-    html, body, #map { height: 100%; margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
-
-    /* Sidebar container */
-    #sidebar {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      width: 320px;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      padding: 12px;
-      max-height: 80vh;
-      overflow-y: auto;
-      font-size: 0.9rem;
-      z-index: 1000;
-    }
-    #sidebar h4 {
-      margin: 0 0 10px;
-      font-size: 1.2rem;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 6px;
-      color: #333;
-    }
-    #sidebar .summary {
-      font-weight: 600;
-      margin-bottom: 12px;
-      color: #555;
-    }
-    #sidebar ul { list-style: none; padding: 0; margin: 0; }
-    #sidebar li {
-      margin-bottom: 10px;
-      cursor: pointer;
-      padding: 8px;
-      border-radius: 6px;
-      transition: background 0.2s;
-      background: #fafafa;
-      display: flex;
-      flex-direction: column;
-    }
-    #sidebar li:hover {
-      background: #f0f4f8;
-    }
-    #sidebar .header-row { display: flex; align-items: center; margin-bottom: 4px; }
-    #sidebar .swatch { width: 14px; height: 14px; border-radius: 3px; margin-right: 8px; flex-shrink: 0; border: 1px solid #999; }
-    #sidebar b.number { width: 22px; text-align: center; margin-right: 8px; font-weight: 600; color: #333; }
-    #sidebar .title { font-weight: 600; color: #222; flex-grow: 1; }
-    #sidebar .details { font-size: 0.85rem; color: #555; margin-left: 30px; }
-
-    /* Number marker style */
-    .number-marker {
-      color: #fff;
-      font-weight: bold;
-      text-align: center;
-      border-radius: 50%;
-      width: 26px;
-      height: 26px;
-      line-height: 26px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
-      font-size: 0.85rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+    /* ... existing styles ... */
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="sidebar">
     <h4>Projects Dashboard</h4>
-    <div id="project-summary" class="summary"></div>
+    <div id="project-summary"></div>
+    <button id="sync-btn" class="btn">Sync Projects to GitHub</button>
+    <button id="toggle-add-btn" class="btn">Add Project +</button>
+    <form id="add-project-form">
+      <!-- input fields -->
+    </form>
     <ul id="sidebar-list"></ul>
   </div>
 
   <script>
-    const projects = [
-      { name: "Staunton Solar Project", lat: 38.157, lng: -79.049, size: 26.0, capex: 47000000 },
-      { name: "Mowdy Solar Project",    lat: 34.4957, lng: -96.301,     size: 0.37, capex: 550000 },
-      { name: "Edgecore Solar Project", lat: 33.124281, lng: -111.462084, size: 20,   capex: 41000000 },
-      { name: "Rising Star Solar Project", lat: 31.440454, lng: -100.717888, size: 140, capex: 140000000 },
-      { name: "Mary Kay (HQ) Solar Project", lat: 32.971425, lng: -96.822403, size: 1.5, capex: 4000000 },
-      { name: "Mary Kay (RD) Solar Project", lat: 32.997469, lng: -96.992903, size: 3.9, capex: 5800000 },
-      { name: "Baylor Univ Solar Project",  lat: 31.545373, lng: -97.116951, size: 2.3, capex: 7200000 },
-      { name: "Lockeford Solar Project",    lat: 38.153201, lng: -121.162002, size: 1.25, capex: 6400000 },
-    //  { name: "City of Rochester (RFP)",    lat: 43.153795, lng: -77.611073, size: 1.08, capex: 2500000 },
-      { name: "Chesterfield (RFP)",         lat: 37.491372, lng: -77.546076, size: 1.6, capex: 3300000 },
-      { name: "EBP–Gorges Project (RFP)",   lat: 35.298807, lng: -85.205338, size: 3,    capex: 7500000 }
-    ];
+  // --- Element refs ---
+  const syncBtn     = document.getElementById('sync-btn');
+  const toggleBtn   = document.getElementById('toggle-add-btn');
+  const form        = document.getElementById('add-project-form');
+  const confirmBtn  = document.getElementById('confirm-btn');
+  const summaryDiv  = document.getElementById('project-summary');
+  const sidebarList = document.getElementById('sidebar-list');
 
-    const palette = ["#1f78b4","#33a02c","#e31a1c","#ff7f00","#6a3d9a","#b15928","#a6cee3","#b2df8a","#fb9a99","#fdbf6f","#cab2d6"];
+  // --- Map setup ---
+  const map = L.map('map').setView([37.8, -96], 4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
 
-    const map = L.map('map').setView([37.8, -96], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22, attribution: '© OpenStreetMap contributors' }).addTo(map);
+  // --- Data & palette ---
+  let projects = [];
+  // No default projects; rely solely on projects.json\ n  // If you want an empty start, projects will be empty array if load fails
+  
+  // Remove defaultProjects definition
+  const palette = ["#1f78b4","#33a02c","#e31a1c","#ff7f00","#6a3d9a","#b15928","#a6cee3","#b2df8a","#fb9a99","#fdbf6f","#cab2d6"];
+  const markers = [];
+  let editIndex = null;
 
-    const allLatLngs = [];
-    const sidebarList = document.getElementById('sidebar-list');
-    const summaryDiv = document.getElementById('project-summary');
-
-    let totalMW = 0, totalCapex = 0;
-
-    projects.forEach((p, i) => {
-      totalMW += p.size;
-      totalCapex += p.capex;
-
+  // --- Rendering helpers ---
+  function updateSummary() {
+    const totalMW = projects.reduce((sum,p) => sum + p.size, 0);
+    const totalCap = projects.reduce((sum,p) => sum + p.capex, 0);
+    summaryDiv.textContent = `Projects: ${projects.length} | Capacity: ${totalMW.toFixed(1)} MW | CapEx: $${(totalCap/1e6).toFixed(1)}M`;
+  }
+  function clearAll() {
+    markers.forEach(m => map.removeLayer(m));
+    markers.length = 0;
+    sidebarList.innerHTML = '';
+  }
+  function renderAll() {
+    clearAll();
+    projects.forEach((p,i) => {
       const color = palette[i % palette.length];
-      const ll = [p.lat, p.lng];
-      allLatLngs.push(ll);
-
-      const icon = L.divIcon({ html: `<div class=\"number-marker\" style=\"background:${color}\">${i+1}</div>`, className: '', iconSize: [26,26], iconAnchor: [13,13] });
-      const marker = L.marker(ll, { icon }).addTo(map);
+      const icon = L.divIcon({ html: `<div class="number-marker" style="background:${color}">${i+1}</div>`, iconSize:[26,26], iconAnchor:[13,13] });
+      const marker = L.marker([p.lat,p.lng], { icon }).addTo(map);
+      marker.bindPopup(`<strong>${p.name}</strong><br/>${p.size} MW<br/>$${(p.capex/1e6).toFixed(1)}M`);
+      markers.push(marker);
 
       const li = document.createElement('li');
       li.innerHTML = `
-        <div class=\"header-row\">
-          <span class=\"swatch\" style=\"background:${color}\"></span>
-          <b class=\"number\">${i+1}</b>
-          <div class=\"title\">${p.name}</div>
+        <div class="header-row">
+          <div class="header-left"><span class="swatch" style="background:${color}"></span><b class="number">${i+1}</b><span class="title">${p.name}</span></div>
+          <div>
+            <button class="action-btn" data-action="edit" data-index="${i}">Edit</button>
+            <button class="action-btn" data-action="delete" data-index="${i}">Del</button>
+          </div>
         </div>
-        <div class=\"details\">${p.size} MW | $${(p.capex/1e6).toFixed(1)} M</div>
+        <div class="details">${p.size} MW | $${(p.capex/1e6).toFixed(1)}M</div>
       `;
-      li.onclick = () => { map.setView(ll, 10); marker.openPopup(); };
       sidebarList.appendChild(li);
-
-      marker.bindPopup(`<h5>${p.name}</h5><p><strong>Capacity:</strong> ${p.size} MW</p><p><strong>CapEx:</strong> $${(p.capex/1e6).toFixed(1)} M</p>`);
     });
+    updateSummary();
+    if (markers.length) map.fitBounds(markers.map(m => m.getLatLng()), { padding:[40,40] });
+  }
 
-    summaryDiv.textContent = `Total Projects: ${projects.length} | Combined Capacity: ${totalMW.toFixed(1)} MW | Total CapEx: $${(totalCapex/1e6).toFixed(1)} M`;
+  // --- Load from projects.json ---
+  fetch('projects.json')
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => { projects = data; })
+    .catch(() => { projects = [...defaultProjects]; })
+    .finally(renderAll);
 
-    if (allLatLngs.length) map.fitBounds(allLatLngs, { padding: [40,40] });
-  </script>
+    // --- Handlers: toggle form visibility with security ---
+  toggleBtn.onclick = () => {
+    const code = prompt('Enter security code to add/edit projects');
+    if (code !== 'FREC') { alert('Invalid code'); return; }
+    form.reset();
+    editIndex = null;
+    confirmBtn.textContent = 'Confirm Add';
+    form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    toggleBtn.textContent = form.style.display === 'block' ? 'Hide Form' : 'Add Project +';
+  };
+
+  // --- Handler: edit or delete actions ---
+  sidebarList.onclick = e => {
+    const btn = e.target.closest('button.action-btn');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.index);
+    const action = btn.dataset.action;
+    const code = prompt('Enter security code to proceed');
+    if (code !== 'FREC') { alert('Invalid code'); return; }
+    if (action === 'delete') {
+      projects.splice(idx, 1);
+      renderAll();
+    } else if (action === 'edit') {
+      const p = projects[idx];
+      document.getElementById('proj-name').value = p.name;
+      document.getElementById('proj-lat').value = p.lat;
+      document.getElementById('proj-lng').value = p.lng;
+      document.getElementById('proj-size').value = p.size;
+      document.getElementById('proj-capex').value = p.capex;
+      editIndex = idx;
+      form.style.display = 'block';
+      confirmBtn.textContent = 'Save Changes';
+      toggleBtn.textContent = 'Hide Form';
+    }
+  };
+
+  // --- Handler: add or save project submission ---
+  form.onsubmit = e => {
+    e.preventDefault();
+    const code = prompt('Enter security code to add or save project');
+    if (code !== 'FREC') { alert('Invalid code'); return; }
+    const name = document.getElementById('proj-name').value.trim();
+    const lat = parseFloat(document.getElementById('proj-lat').value);
+    const lng = parseFloat(document.getElementById('proj-lng').value);
+    const size = Math.round(parseFloat(document.getElementById('proj-size').value) * 10) / 10;
+    const capex = Math.round(parseFloat(document.getElementById('proj-capex').value));
+    if (!name || isNaN(lat) || isNaN(lng) || isNaN(size) || isNaN(capex)) return;
+    const newProj = { name, lat, lng, size, capex };
+    if (editIndex != null) projects[editIndex] = newProj;
+    else projects.push(newProj);
+    renderAll();
+    form.reset();
+    form.style.display = 'none';
+    editIndex = null;
+    toggleBtn.textContent = 'Add Project +';
+  };
+</script>
+<script src="sync.js"></script>
+</body>
+</html>
+<script src="sync.js"></script>
 </body>
 </html>
