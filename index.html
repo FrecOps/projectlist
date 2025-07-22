@@ -2,15 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Project Map with Sidebar & GitHub Sync</title>
+  <title>Projects Map Dashboard</title>
   <!-- Leaflet CSS & JS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    /* ... existing CSS from canvas ... */
+    html, body, #map {height:100%;margin:0;font-family:'Segoe UI',Tahoma,sans-serif}
+    #sidebar{position:absolute;top:20px;left:20px;width:360px;background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:12px;max-height:80vh;overflow-y:auto;font-size:.9rem;z-index:1000}
+    #sidebar h4{margin:0 0 10px;font-size:1.2rem;border-bottom:1px solid #eee;padding-bottom:6px;color:#333}
+    #sidebar .summary{font-weight:600;margin-bottom:12px;color:#555}
+    .btn{width:100%;padding:6px;margin-bottom:6px;font-weight:700;border:none;border-radius:4px;background:#0d6efd;color:#fff;cursor:pointer;transition:background .2s}
+    .btn:hover{background:#0b5ed7}
+    #add-project-form{display:none;margin-bottom:12px}
+    #add-project-form input,#add-project-form button{width:100%;padding:6px;margin-bottom:6px;border:1px solid #ccc;border-radius:4px;font-size:.9rem}
+    .action-btn{margin-left:6px;padding:2px 6px;font-size:.8rem;border:none;border-radius:3px;background:#6c757d;color:#fff}
+    .action-btn:hover{background:#5a6268}
+    #sidebar ul{list-style:none;padding:0;margin:0}
+    #sidebar li{background:#fafafa;margin-bottom:10px;padding:8px;border-radius:6px;transition:background .2s}
+    #sidebar li:hover{background:#f0f4f8}
+    .header-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+    .header-left{display:flex;align-items:center}
+    .swatch{width:14px;height:14px;border-radius:3px;margin-right:8px;border:1px solid #999}
+    .number{width:22px;text-align:center;margin-right:8px;font-weight:600;color:#333}
+    .title{font-weight:600;color:#222}
+    .details{margin-left:30px;font-size:.85rem;color:#555}
+    .number-marker{display:flex;align-items:center;justify-content:center;width:26px;height:26px;line-height:26px;border-radius:50%;font-size:.85rem;font-weight:700;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.4);background:#0d6efd}
   </style>
 </head>
 <body>
@@ -18,132 +34,160 @@
   <div id="sidebar">
     <h4>Projects Dashboard</h4>
     <div id="project-summary" class="summary"></div>
-    <button id="sync-btn" class="btn">Sync Projects to GitHub</button>
+    <button id="sync-btn" class="btn">Save to Server</button>
     <button id="toggle-add-btn" class="btn">Add Project +</button>
+
     <form id="add-project-form">
-      <input type="text" id="proj-name" placeholder="Name (required)" required />
-      <input type="number" step="any" id="proj-lat" placeholder="Latitude (required)" required />
-      <input type="number" step="any" id="proj-lng" placeholder="Longitude (required)" required />
-      <input type="number" step="any" id="proj-size" placeholder="System Size MW (required)" required />
-      <input type="number" step="any" id="proj-capex" placeholder="CapEx $ (required)" required />
-      <button type="submit" id="confirm-btn">Confirm Add</button>
+      <input id="proj-name"  type="text"   placeholder="Name"              required>
+      <input id="proj-lat"   type="number" step="any" placeholder="Latitude"  required>
+      <input id="proj-lng"   type="number" step="any" placeholder="Longitude" required>
+      <input id="proj-size"  type="number" step="any" placeholder="Size MW"   required>
+      <input id="proj-capex" type="number" step="any" placeholder="CapEx $"   required>
+      <button id="confirm-btn" type="submit">Confirm Add</button>
     </form>
+
     <ul id="sidebar-list"></ul>
   </div>
 
   <script>
-    // Element refs
-    const syncBtn     = document.getElementById('sync-btn');
-    const toggleBtn   = document.getElementById('toggle-add-btn');
-    const form        = document.getElementById('add-project-form');
-    const confirmBtn  = document.getElementById('confirm-btn');
-    const summaryDiv  = document.getElementById('project-summary');
-    const sidebarList = document.getElementById('sidebar-list');
+    /* =============================================
+       CONFIGURATION
+    ==============================================*/
+    // 🔧 Point this to your PythonAnywhere (or any) backend
+    const API_BASE = 'https://<your-username>.pythonanywhere.com';
+    const SECURITY_CODE = 'FREC';
 
-    // Map setup
-    const map = L.map('map').setView([37.8, -96], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
+    /* =============================================
+       ELEMENT REFERENCES
+    ==============================================*/
+    const mapEl        = L.map('map').setView([37.8,-96],4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:22}).addTo(mapEl);
 
-    // Data & palette
-    let projects = [];
-    const palette = [
-      '#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a',
-      '#b15928','#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6'
-    ];
-    const markers = [];
-    let editIndex = null;
+    const syncBtn      = document.getElementById('sync-btn');
+    const toggleBtn    = document.getElementById('toggle-add-btn');
+    const formEl       = document.getElementById('add-project-form');
+    const confirmBtn   = document.getElementById('confirm-btn');
+    const summaryDiv   = document.getElementById('project-summary');
+    const sidebarList  = document.getElementById('sidebar-list');
 
-    // Rendering helpers
-    function updateSummary() {
-      const totalMW = projects.reduce((s,p) => s + p.size, 0);
-      const totalCap = projects.reduce((s,p) => s + p.capex, 0);
+    /* =============================================
+       STATE
+    ==============================================*/
+    let projects   = [];
+    let editIndex  = null;
+    const markers  = [];
+    const palette  = ['#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a','#b15928','#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6'];
+
+    /* =============================================
+       RENDERING FUNCTIONS
+    ==============================================*/
+    function updateSummary(){
+      const totalMW  = projects.reduce((s,p)=>s+p.size,0);
+      const totalCap = projects.reduce((s,p)=>s+p.capex,0);
       summaryDiv.textContent = `Projects: ${projects.length} | Capacity: ${totalMW.toFixed(1)} MW | CapEx: $${(totalCap/1e6).toFixed(1)}M`;
     }
-    function clearAll() {
-      markers.forEach(m => map.removeLayer(m));
+
+    function clearMapAndList(){
+      markers.forEach(m=>mapEl.removeLayer(m));
       markers.length = 0;
       sidebarList.innerHTML = '';
     }
-    function renderAll() {
-      clearAll();
-      projects.forEach((p,i) => {
-        const color = palette[i % palette.length];
-        const icon = L.divIcon({ html: `<div class="number-marker" style="background:${color}">${i+1}</div>`, iconSize:[26,26], iconAnchor:[13,13] });
-        const marker = L.marker([p.lat, p.lng], { icon }).addTo(map);
-        marker.bindPopup(`<strong>${p.name}</strong><br/>${p.size} MW<br/>$${(p.capex/1e6).toFixed(1)}M`);
-        markers.push(marker);
+
+    function renderAll(){
+      clearMapAndList();
+      projects.forEach((p,i)=>{
+        const color = palette[i%palette.length];
+        const icon  = L.divIcon({html:`<div class='number-marker' style='background:${color}'>${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]});
+        const mk    = L.marker([p.lat,p.lng],{icon}).addTo(mapEl).bindPopup(`<strong>${p.name}</strong><br>${p.size} MW<br>$${(p.capex/1e6).toFixed(1)} M`);
+        markers.push(mk);
 
         const li = document.createElement('li');
         li.innerHTML = `
-          <div class="header-row">
-            <div class="header-left"><span class="swatch" style="background:${color}"></span><b class="number">${i+1}</b><span class="title">${p.name}</span></div>
+          <div class='header-row'>
+            <div class='header-left'>
+              <span class='swatch' style='background:${color}'></span>
+              <b class='number'>${i+1}</b>
+              <span class='title'>${p.name}</span>
+            </div>
             <div>
-              <button class="action-btn" data-action="edit" data-index="${i}">Edit</button>
-              <button class="action-btn" data-action="delete" data-index="${i}">Del</button>
+              <button class='action-btn' data-action='edit' data-index='${i}'>Edit</button>
+              <button class='action-btn' data-action='delete' data-index='${i}'>Del</button>
             </div>
           </div>
-          <div class="details">${p.size} MW | $${(p.capex/1e6).toFixed(1)}M</div>
-        `;
+          <div class='details'>${p.size} MW | $${(p.capex/1e6).toFixed(1)} M</div>`;
         sidebarList.appendChild(li);
       });
       updateSummary();
-      if (markers.length) map.fitBounds(markers.map(m => m.getLatLng()), { padding:[40,40] });
+      if(markers.length) mapEl.fitBounds(markers.map(m=>m.getLatLng()),{padding:[40,40]});
     }
 
-    // Load projects.json
-    fetch('projects.json')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => { projects = data; })
-      .catch(() => { projects = []; })
-      .finally(renderAll);
+    /* =============================================
+       BACKEND I/O
+    ==============================================*/
+    function loadRemote(){
+      return fetch(`${API_BASE}/projects.json`).then(r=>r.json());
+    }
 
-    // Sync button calls syncToGitHub from sync.js
-    syncBtn.onclick = () => syncToGitHub().catch(e => alert('Sync failed: '+e.message));
+    function saveRemote(){
+      return fetch(`${API_BASE}/sync`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-SEC-CODE':SECURITY_CODE},
+        body:JSON.stringify({projects})
+      }).then(r=>{
+        if(!r.ok) throw new Error('Server error');
+      });
+    }
 
-    // Toggle form visibility
-    toggleBtn.onclick = () => {
-      const code = prompt('Enter security code');
-      if (code !== 'FREC') return alert('Invalid code');
-      form.reset(); editIndex = null;
-      confirmBtn.textContent = 'Confirm Add';
-      form.style.display = form.style.display==='block'?'none':'block';
-      toggleBtn.textContent = form.style.display==='block'?'Hide Form':'Add Project +';
+    /* =============================================
+       EVENT HANDLERS
+    ==============================================*/
+    syncBtn.onclick = ()=> saveRemote().then(()=>alert('Saved!')).catch(e=>alert(e));
+
+    toggleBtn.onclick = ()=>{
+      if(prompt('Security code?')!==SECURITY_CODE) return alert('Denied');
+      formEl.reset(); editIndex=null; confirmBtn.textContent='Confirm Add';
+      formEl.style.display = formEl.style.display==='block'?'none':'block';
+      toggleBtn.textContent = formEl.style.display==='block'?'Hide Form':'Add Project +';
     };
 
-    // Edit/Delete handlers
-    sidebarList.onclick = e => {
-      const btn = e.target.closest('button.action-btn'); if (!btn) return;
-      const idx = +btn.dataset.index; const action = btn.dataset.action;
-      const code = prompt('Enter security code'); if (code!=='FREC') return alert('Invalid code');
-      if (action==='delete') {
-        projects.splice(idx,1); renderAll();
-        syncToGitHub().catch(e=>alert('Sync failed: '+e.message));
+    sidebarList.onclick = e=>{
+      const btn = e.target.closest('button.action-btn'); if(!btn) return;
+      if(prompt('Security code?')!==SECURITY_CODE) return alert('Denied');
+      const idx = +btn.dataset.index;
+      if(btn.dataset.action==='delete'){
+        projects.splice(idx,1);
+        renderAll(); saveRemote().catch(e=>alert(e));
         return;
       }
       // edit
       const p = projects[idx];
-      ['name','lat','lng','size','capex'].forEach(key =>
-        document.getElementById('proj-'+key).value = p[key]
-      );
-      editIndex = idx; form.style.display='block'; confirmBtn.textContent='Save Changes'; toggleBtn.textContent='Hide Form';
+      document.getElementById('proj-name' ).value = p.name;
+      document.getElementById('proj-lat'  ).value = p.lat;
+      document.getElementById('proj-lng'  ).value = p.lng;
+      document.getElementById('proj-size' ).value = p.size;
+      document.getElementById('proj-capex').value = p.capex;
+      editIndex = idx; formEl.style.display='block'; confirmBtn.textContent='Save Changes'; toggleBtn.textContent='Hide Form';
     };
 
-    // Form submit handler
-    form.onsubmit = e => {
+    formEl.onsubmit = e=>{
       e.preventDefault();
-      const code = prompt('Enter security code'); if (code!=='FREC') return alert('Invalid code');
-      const name  = document.getElementById('proj-name').value.trim();
-      const lat   = parseFloat(document.getElementById('proj-lat').value);
-      const lng   = parseFloat(document.getElementById('proj-lng').value);
-      const size  = Math.round(parseFloat(document.getElementById('proj-size').value)*10)/10;
-      const capex = Math.round(parseFloat(document.getElementById('proj-capex').value));
-      if (!name||isNaN(lat)||isNaN(lng)||isNaN(size)||isNaN(capex)) return;
-      const newProj={name,lat,lng,size,capex};
-      if (editIndex!=null) projects[editIndex]=newProj; else projects.push(newProj);
-      renderAll(); form.reset(); form.style.display='none'; editIndex=null; toggleBtn.textContent='Add Project +';
-      syncToGitHub().catch(e=>alert('Sync failed: '+e.message));
+      if(prompt('Security code?')!==SECURITY_CODE) return alert('Denied');
+      const obj = {
+        name : document.getElementById('proj-name' ).value.trim(),
+        lat  : +document.getElementById('proj-lat'  ).value,
+        lng  : +document.getElementById('proj-lng'  ).value,
+        size : Math.round(+document.getElementById('proj-size').value*10)/10,
+        capex: Math.round(+document.getElementById('proj-capex').value)
+      };
+      if(editIndex!=null) projects[editIndex]=obj; else projects.push(obj);
+      renderAll(); formEl.reset(); formEl.style.display='none'; editIndex=null; toggleBtn.textContent='Add Project +';
+      saveRemote().catch(e=>alert(e));
     };
+
+    /* =============================================
+       BOOTSTRAP
+    ==============================================*/
+    loadRemote().then(data=>{projects=data;}).catch(()=>projects=[]).finally(renderAll);
   </script>
-  <script src="sync.js"></script>
 </body>
 </html>
