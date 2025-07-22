@@ -88,7 +88,7 @@
     <h4>Projects Dashboard</h4>
     <div id="project-summary" class="summary"></div>
     <button id="sync-btn" class="btn">Sync Projects to GitHub</button>
-    <button id="toggle-add-btn" class="btn">Add Project +</button>
+    <button id="toggle-add-btn" class="btn">Add Project </button>
     <form id="add-project-form">
       <input type="text" id="proj-name" placeholder="Name (required)" required />
       <input type="number" step="any" id="proj-lat" placeholder="Latitude (required)" required />
@@ -172,17 +172,22 @@
       form.reset(); editIndex = null;
       confirmBtn.textContent = 'Confirm Add';
       form.style.display = form.style.display==='block'?'none':'block';
-      toggleBtn.textContent = form.style.display==='block'?'Hide Form':'Add Project +';
+      toggleBtn.textContent = form.style.display==='block'?'Hide Form':'Add Project';
     };
 
     // Edit/Delete handlers
     sidebarList.onclick = e => {
       const btn = e.target.closest('button.action-btn'); if (!btn) return;
-      const idx = +btn.dataset.index;
+      const idx = btn.dataset.index;
       const action = btn.dataset.action;
       const code = prompt('Enter security code to proceed');
       if (code !== 'FREC') { alert('Invalid code'); return; }
-      if (action === 'delete') { projects.splice(idx,1); renderAll(); return; }
+      if (action === 'delete') {
+        projects.splice(idx,1);
+        renderAll();
+        syncToGitHub().catch(err=>alert('Sync failed: '+err.message));
+        return;
+      }
       // edit
       const p = projects[idx];
       document.getElementById('proj-name').value = p.name;
@@ -193,16 +198,17 @@
       editIndex = idx; form.style.display='block'; confirmBtn.textContent='Save Changes'; toggleBtn.textContent='Hide Form';
     };
 
+
     // Form submit handler
     form.onsubmit = e => {
       e.preventDefault();
       const code = prompt('Enter security code to add or save project');
       if (code !== 'FREC') { alert('Invalid code'); return; }
       const name = document.getElementById('proj-name').value.trim();
-      const lat  = +document.getElementById('proj-lat').value;
-      const lng  = +document.getElementById('proj-lng').value;
-      const size = Math.round(+document.getElementById('proj-size').value*10)/10;
-      const capex= Math.round(+document.getElementById('proj-capex').value);
+      const lat  = document.getElementById('proj-lat').value;
+      const lng  = document.getElementById('proj-lng').value;
+      const size = Math.round(document.getElementById('proj-size').value*10)/10;
+      const capex= Math.round(document.getElementById('proj-capex').value);
       if(!name||isNaN(lat)||isNaN(lng)||isNaN(size)||isNaN(capex)) return;
       const newProj={name,lat,lng,size,capex};
       if(editIndex!=null) projects[editIndex]=newProj; else projects.push(newProj);
